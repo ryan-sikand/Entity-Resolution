@@ -64,3 +64,18 @@ export const buildMaestroProcessInstanceUrl = ({
     { folderKey }
   );
 };
+
+export const buildActionCenterTaskEmbedUrl = (taskId: number | string) => {
+  const orgName = getEnvString(import.meta.env.VITE_UIPATH_ORG_NAME);
+  const tenantName = getEnvString(import.meta.env.VITE_UIPATH_TENANT_NAME);
+
+  return buildPortalUrl([
+    'embed_',
+    orgName,
+    tenantName,
+    'actions_',
+    'current-task',
+    'tasks',
+    String(taskId),
+  ]);
+};

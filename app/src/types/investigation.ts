@@ -26,6 +26,14 @@ export interface Investigation {
   isRandomized?: boolean;
 }
 
+export interface ActionCenterTaskInfo {
+  status: 'loading' | 'available' | 'none' | 'completed' | 'error';
+  taskId?: number;
+  taskTitle?: string;
+  taskStatus?: string;
+  error?: string;
+}
+
 export interface InvestigationFilters {
   riskLevels: RiskLevel[];
   caseStatuses: CaseStatus[];

@@ -11,6 +11,9 @@ const defaultUiPathScope =
   'OR.Administration OR.Execution.Read OR.Jobs OR.Jobs.Read OR.Jobs.Write OR.Tasks OR.Tasks.Read OR.Tasks.Write PIMS DataFabric.Schema.Read DataFabric.Data.Read DataFabric.Data.Write';
 
 const runtimeRedirectUri = `${window.location.origin}${window.location.pathname}`;
+const configuredRedirectUri = String(import.meta.env.VITE_UIPATH_REDIRECT_URI || '')
+  .replace(/\s+#.*$/, '')
+  .trim();
 
 const authConfig: UiPathSDKConfig = {
   clientId: import.meta.env.VITE_UIPATH_CLIENT_ID || 'your-client-id',
@@ -20,8 +23,8 @@ const authConfig: UiPathSDKConfig = {
   baseUrl: (import.meta.env.DEV && useCorsProxy)
     ? window.location.origin
     : (import.meta.env.VITE_UIPATH_BASE_URL || 'https://api.uipath.com'),
-  // OAuth must return to the exact page the app is running on.
-  redirectUri: runtimeRedirectUri,
+  // OAuth must return to a redirect URI registered on the external app.
+  redirectUri: configuredRedirectUri || runtimeRedirectUri,
   scope: import.meta.env.VITE_UIPATH_SCOPE || import.meta.env.VITE_UIPATH_SCOPES || defaultUiPathScope,
 };
 

@@ -1,16 +1,19 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { StartStrategy, JobPriority, RuntimeType } from '@uipath/uipath-typescript';
+import { Tasks, TaskStatus } from '@uipath/uipath-typescript/tasks';
+import type { TaskGetResponse } from '@uipath/uipath-typescript/tasks';
 import { Sidebar } from './Sidebar';
 import { KPICards } from './KPICards';
 import { FilterControls } from './FilterControls';
 import { InvestigationTable } from './InvestigationTable';
 import { InvestigationDetails } from './InvestigationDetails';
+import { ActionCenterTaskModal } from './ActionCenterTaskModal';
 import { StartInvestigationModal } from './modals/StartInvestigationModal';
 import { SettingsPage } from './SettingsPage';
 import { generateMockInvestigations, calculateKPIs } from '../services/mockInvestigations';
 import { USE_MOCK_DATA, ENTITY_CONFIG } from '../config/mockData.config';
 import { mapEntitiesToInvestigations } from '../utils/investigationMapper';
-import type { Investigation, InvestigationFilters, TargetInvestigationEntity, AgentOutput } from '../types/investigation';
+import type { ActionCenterTaskInfo, Investigation, InvestigationFilters, TargetInvestigationEntity, AgentOutput } from '../types/investigation';
 import type { ProcessStartRequest, UiPath } from '@uipath/uipath-typescript';
 import { getMissingJobStartScopeMessage, logUiPathTokenDiagnostics } from '../utils/uipathTokenDiagnostics';
 
@@ -24,6 +27,16 @@ type ProcessStartTarget = {
   folderKey?: string;
   processName?: string;
   source: string;
+};
+
+type ActionCenterTaskState = ActionCenterTaskInfo & {
+  task?: TaskGetResponse;
+};
+
+type ActiveActionCenterTask = {
+  investigation: Investigation;
+  task: TaskGetResponse;
+  completed: boolean;
 };
 
 const parsePositiveInteger = (value: unknown): number | undefined => {
@@ -105,6 +118,71 @@ const getStartProcessErrorMessage = (err: unknown) => {
   return err instanceof Error ? err.message : 'Failed to start investigation process';
 };
 
+const getTaskLookupErrorMessage = (err: unknown) => {
+  if (err && typeof err === 'object') {
+    const typedError = err as {
+      type?: string;
+      message?: string;
+      title?: string;
+      details?: string;
+      status?: number;
+      statusCode?: number;
+    };
+    return [
+      typedError.type,
+      typedError.statusCode || typedError.status ? `HTTP ${typedError.statusCode || typedError.status}` : undefined,
+      typedError.message,
+      typedError.title,
+      typedError.details,
+    ].filter(Boolean).join(' | ') || 'Failed to load Action Center task';
+  }
+
+  return err instanceof Error ? err.message : 'Failed to load Action Center task';
+};
+
+const isValidationError = (err: unknown) => {
+  if (!err || typeof err !== 'object') return false;
+  const typedError = err as { type?: string; status?: number; statusCode?: number };
+  return typedError.type === 'ValidationError' || typedError.status === 400 || typedError.statusCode === 400;
+};
+
+const findPendingActionCenterTask = async (
+  tasks: Tasks,
+  investigation: Investigation
+): Promise<TaskGetResponse | null> => {
+  if (!investigation.maestroProcessInstanceKey) {
+    return null;
+  }
+
+  const creatorJobKey = investigation.maestroProcessInstanceKey;
+  const baseOptions = { pageSize: 10 };
+  const unquotedFilter = `Status ne '${TaskStatus.Completed}' and CreatorJobKey eq ${creatorJobKey}`;
+  const quotedFilter = `Status ne '${TaskStatus.Completed}' and CreatorJobKey eq '${creatorJobKey}'`;
+
+  let result;
+  try {
+    result = await tasks.getAll({
+      ...baseOptions,
+      filter: unquotedFilter,
+    });
+  } catch (err) {
+    if (!isValidationError(err)) {
+      throw err;
+    }
+
+    result = await tasks.getAll({
+      ...baseOptions,
+      filter: quotedFilter,
+    });
+  }
+
+  const candidates = result.items
+    .filter((task) => !task.isDeleted && !task.isCompleted && task.status !== TaskStatus.Completed)
+    .sort((a, b) => new Date(b.createdTime).getTime() - new Date(a.createdTime).getTime());
+
+  return candidates[0] ?? null;
+};
+
 export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => {
   const [activeView, setActiveView] = useState('dashboard');
   const [allInvestigations, setAllInvestigations] = useState<Investigation[]>([]);
@@ -150,8 +228,12 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
     loading: boolean;
     error?: string;
   }>({ loading: false });
+  const taskService = useMemo(() => sdk ? new Tasks(sdk) : undefined, [sdk]);
+  const [actionCenterTasks, setActionCenterTasks] = useState<Record<string, ActionCenterTaskState>>({});
+  const [taskRefreshCounter, setTaskRefreshCounter] = useState(0);
+  const [activeActionTask, setActiveActionTask] = useState<ActiveActionCenterTask | null>(null);
 
-  const fetchInvestigations = async (isRefresh = false) => {
+  const fetchInvestigations = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -192,7 +274,7 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
         setLoading(false);
       }
     }
-  };
+  }, [demoResetTime, sdk]);
 
   const handleRefresh = async () => {
     await fetchInvestigations(true);
@@ -481,7 +563,7 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
         throw new Error(missingScopeMessage);
       }
 
-      const processKey = (import.meta.env.VITE_MAESTRO_PROCESS_KEY || '492019ca-34ad-4fa3-a7fd-050fc29783b9').trim();
+      const processKey = (import.meta.env.VITE_MAESTRO_PROCESS_KEY || '3F9A25ED-FF9C-4F77-B326-8ADEFCBFB7BF').trim();
       const startTarget = resolveProcessStartTarget(processKey);
       const inputArguments = buildStartInputArguments(subjectName);
       const runAsMe = getConfiguredRunAsMe();
@@ -567,7 +649,7 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
 
   useEffect(() => {
     fetchInvestigations(false);
-  }, [sdk]);
+  }, [fetchInvestigations]);
 
   const filteredInvestigations = useMemo(() => {
     console.log('Filtering with:', {
@@ -665,6 +747,77 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
 
   const totalPages = Math.ceil(sortedInvestigations.length / itemsPerPage);
 
+  useEffect(() => {
+    if (USE_MOCK_DATA || !taskService) {
+      setActionCenterTasks({});
+      return;
+    }
+
+    const lookupTargets = paginatedInvestigations.filter((investigation) => investigation.maestroProcessInstanceKey);
+    if (lookupTargets.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    setActionCenterTasks((previous) => {
+      const next = { ...previous };
+      lookupTargets.forEach((investigation) => {
+        if (!next[investigation.id] || next[investigation.id].status === 'error') {
+          next[investigation.id] = { status: 'loading' };
+        }
+      });
+      return next;
+    });
+
+    const loadTasks = async () => {
+      const results = await Promise.all(
+        lookupTargets.map(async (investigation) => {
+          try {
+            const task = await findPendingActionCenterTask(taskService, investigation);
+            return {
+              investigationId: investigation.id,
+              state: task
+                ? {
+                    status: 'available' as const,
+                    task,
+                    taskId: task.id,
+                    taskTitle: task.title,
+                    taskStatus: task.status,
+                  }
+                : { status: 'none' as const },
+            };
+          } catch (err) {
+            console.error('Failed to load Action Center task for investigation:', investigation.id, err);
+            return {
+              investigationId: investigation.id,
+              state: {
+                status: 'error' as const,
+                error: getTaskLookupErrorMessage(err),
+              },
+            };
+          }
+        })
+      );
+
+      if (cancelled) return;
+
+      setActionCenterTasks((previous) => {
+        const next = { ...previous };
+        results.forEach(({ investigationId, state }) => {
+          next[investigationId] = state;
+        });
+        return next;
+      });
+    };
+
+    void loadTasks();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [paginatedInvestigations, taskRefreshCounter, taskService]);
+
   const kpis = useMemo(() => {
     return calculateKPIs(allInvestigations);
   }, [allInvestigations]);
@@ -689,6 +842,77 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
     setSortDirection(direction);
     setCurrentPage(1); // Reset to first page when sorting changes
   };
+
+  const handleActionCenterTaskClick = (investigation: Investigation) => {
+    const taskState = actionCenterTasks[investigation.id];
+    if (taskState?.status !== 'available' || !taskState.task) {
+      return;
+    }
+
+    setActiveActionTask({
+      investigation,
+      task: taskState.task,
+      completed: false,
+    });
+  };
+
+  useEffect(() => {
+    if (!activeActionTask || activeActionTask.completed || !taskService) return;
+
+    let cancelled = false;
+    let completionHandled = false;
+
+    const pollTaskStatus = async () => {
+      try {
+        const updatedTask = await taskService.getById(
+          activeActionTask.task.id,
+          { taskType: activeActionTask.task.type },
+          activeActionTask.task.folderId
+        );
+
+        if (cancelled) return;
+
+        setActionCenterTasks((previous) => ({
+          ...previous,
+          [activeActionTask.investigation.id]: {
+            ...(previous[activeActionTask.investigation.id] || {}),
+            task: updatedTask,
+            taskId: updatedTask.id,
+            taskTitle: updatedTask.title,
+            taskStatus: updatedTask.status,
+            status: updatedTask.isCompleted || updatedTask.status === TaskStatus.Completed ? 'completed' : 'available',
+          },
+        }));
+
+        setActiveActionTask((previous) => previous
+          ? {
+              ...previous,
+              task: updatedTask,
+              completed: updatedTask.isCompleted || updatedTask.status === TaskStatus.Completed,
+            }
+          : previous
+        );
+
+        if ((updatedTask.isCompleted || updatedTask.status === TaskStatus.Completed) && !completionHandled) {
+          completionHandled = true;
+          await fetchInvestigations(true);
+          setTaskRefreshCounter((value) => value + 1);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          console.warn('Could not refresh Action Center task status:', err);
+        }
+      }
+    };
+
+    void pollTaskStatus();
+    const intervalId = window.setInterval(pollTaskStatus, 4000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [activeActionTask, fetchInvestigations, taskService]);
 
   const handleKPIFilterClick = (filterType: 'risk' | 'status', filterValue: Investigation['overallRisk'] | Investigation['caseStatus']) => {
     console.log('KPI Filter Clicked:', { filterType, filterValue });
@@ -861,6 +1085,8 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
                 totalInvestigations={sortedInvestigations.length}
                 onPageChange={handlePageChange}
                 onInvestigationClick={handleInvestigationClick}
+                actionCenterTasks={actionCenterTasks}
+                onActionCenterTaskClick={handleActionCenterTaskClick}
                 sortField={sortField}
                 sortDirection={sortDirection}
                 onSortChange={handleSortChange}
@@ -893,6 +1119,19 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
           processDetails={processDetails}
           sdk={sdk}
           onClose={handleCloseDetails}
+        />
+      )}
+
+      {activeActionTask && (
+        <ActionCenterTaskModal
+          investigation={activeActionTask.investigation}
+          task={activeActionTask.task}
+          completed={activeActionTask.completed}
+          onClose={() => {
+            setActiveActionTask(null);
+            setTaskRefreshCounter((value) => value + 1);
+            void fetchInvestigations(true);
+          }}
         />
       )}
     </div>
