@@ -7,11 +7,11 @@ import { getRiskContent } from '../utils/riskContent';
 import { ImageModal } from './ui/ImageModal';
 import { Timeline } from './ui/Timeline';
 import { buildMaestroProcessInstanceUrl } from '../utils/uipathLinks';
-import minaHeadshotUrl from '../assets/demo-images/Mina Park Headshot.png';
-import sergeiHeadshotUrl from '../assets/demo-images/Sergei Volkov Headshot.png';
-import sergeiFinancialUrl from '../assets/demo-images/SergeiVolkov_Quarterly financial report overview.jpg';
-import minaPassportUrl from '../assets/demo-images/minapark_passport.jpg';
-import sergeiDriverLicenseUrl from '../assets/demo-images/sergei_drivers_license.jpg';
+import minaHeadshotUrl from '../assets/demo-images/Mina Park Headshot.png?inline';
+import sergeiHeadshotUrl from '../assets/demo-images/Sergei Volkov Headshot.png?inline';
+import sergeiFinancialUrl from '../assets/demo-images/SergeiVolkov_Quarterly financial report overview.jpg?inline';
+import minaPassportUrl from '../assets/demo-images/minapark_passport.jpg?inline';
+import sergeiDriverLicenseUrl from '../assets/demo-images/sergei_drivers_license.jpg?inline';
 
 interface InvestigationDetailsProps {
   investigation: Investigation | null;
