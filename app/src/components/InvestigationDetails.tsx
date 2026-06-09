@@ -7,6 +7,11 @@ import { getRiskContent } from '../utils/riskContent';
 import { ImageModal } from './ui/ImageModal';
 import { Timeline } from './ui/Timeline';
 import { buildMaestroProcessInstanceUrl } from '../utils/uipathLinks';
+import minaHeadshotUrl from '../assets/demo-images/Mina Park Headshot.png';
+import sergeiHeadshotUrl from '../assets/demo-images/Sergei Volkov Headshot.png';
+import sergeiFinancialUrl from '../assets/demo-images/SergeiVolkov_Quarterly financial report overview.jpg';
+import minaPassportUrl from '../assets/demo-images/minapark_passport.jpg';
+import sergeiDriverLicenseUrl from '../assets/demo-images/sergei_drivers_license.jpg';
 
 interface InvestigationDetailsProps {
   investigation: Investigation | null;
@@ -23,7 +28,6 @@ interface InvestigationDetailsProps {
 export const InvestigationDetails = ({
   investigation,
   processDetails,
-  sdk,
   onClose,
 }: InvestigationDetailsProps) => {
 
@@ -44,45 +48,21 @@ export const InvestigationDetails = ({
 
   // Get environment variables
   const PROCESS_DEFINITION_KEY = import.meta.env.VITE_MAESTRO_PROCESS_KEY;
-  const BUCKET_ID = parseInt(import.meta.env.VITE_UIPATH_BUCKET_ID || '0');
-  const FOLDER_ID = parseInt(import.meta.env.VITE_MAESTRO_FOLDER_KEY_ID || '0');
   const showDebugBox = import.meta.env.VITE_SHOW_DEBUG_BOX === 'true';
   const normalizedSubjectName = investigation?.subjectName?.trim().toLowerCase() || '';
   const subjectAssetConfig =
     normalizedSubjectName === 'sergei volkov'
       ? {
-          passportPaths: ['sergei_passport3.jpg', '/sergei_passport3.jpg'],
-          subjectPhotoPaths: ['Sergei_Volkov_Headshot.png', '/Sergei_Volkov_Headshot.png'],
-          financialPaths: [
-            'SergeiVolkov_Quarterly financial report overview.jpg',
-            '/SergeiVolkov_Quarterly financial report overview.jpg',
-          ],
+          passport: sergeiDriverLicenseUrl,
+          subjectPhoto: sergeiHeadshotUrl,
+          financial: sergeiFinancialUrl,
         }
       : normalizedSubjectName === 'mina park'
         ? {
-            passportPaths: ['minapark_passport.jpg', '/minapark_passport.jpg'],
-            subjectPhotoPaths: ['Mina_Park_Headshot.png', '/Mina_Park_Headshot.png'],
+            passport: minaPassportUrl,
+            subjectPhoto: minaHeadshotUrl,
           }
         : null;
-
-  const getFirstReadableUri = async (paths: string[]) => {
-    for (const path of paths) {
-      try {
-        const response = await sdk!.buckets.getReadUri({
-          bucketId: BUCKET_ID,
-          folderId: FOLDER_ID,
-          path,
-        });
-        if (response?.uri) {
-          return response.uri;
-        }
-      } catch (error) {
-        console.warn(`Document not found at path "${path}"`, error);
-      }
-    }
-
-    return undefined;
-  };
 
   const openMaestroProcess = () => {
     if (!investigation?.maestroProcessInstanceKey || !investigation?.folderId) {
@@ -99,9 +79,9 @@ export const InvestigationDetails = ({
     window.open(url, '_blank');
   };
 
-  // Fetch documents from bucket
+  // Load bundled demo documents.
   const fetchDocumentUrls = async () => {
-    if (!investigation || !sdk) return;
+    if (!investigation) return;
 
     try {
       setLoadingDocuments(true);
@@ -111,16 +91,7 @@ export const InvestigationDetails = ({
         return;
       }
 
-      const urls: any = {
-        passport: await getFirstReadableUri(subjectAssetConfig.passportPaths),
-        subjectPhoto: await getFirstReadableUri(subjectAssetConfig.subjectPhotoPaths),
-      };
-
-      if (subjectAssetConfig.financialPaths) {
-        urls.financial = await getFirstReadableUri(subjectAssetConfig.financialPaths);
-      }
-
-      setDocumentUrls(urls);
+      setDocumentUrls(subjectAssetConfig);
     } catch (err) {
       setDocumentUrls({});
       console.error('Error fetching document URLs:', err);
@@ -129,12 +100,12 @@ export const InvestigationDetails = ({
     }
   };
 
-  // Fetch documents when investigation changes
+  // Load documents when investigation changes
   useEffect(() => {
-    if (investigation && sdk) {
+    if (investigation) {
       fetchDocumentUrls();
     }
-  }, [investigation?.id, sdk]);
+  }, [investigation?.id]);
 
   // Handle escape key to close modal
   useEffect(() => {
