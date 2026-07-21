@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { StartStrategy, JobPriority, RuntimeType } from '@uipath/uipath-typescript';
 import { Tasks, TaskStatus } from '@uipath/uipath-typescript/tasks';
 import type { TaskGetResponse } from '@uipath/uipath-typescript/tasks';
@@ -8,6 +8,7 @@ import { FilterControls } from './FilterControls';
 import { InvestigationTable } from './InvestigationTable';
 import { InvestigationDetails } from './InvestigationDetails';
 import { ActionCenterTaskModal } from './ActionCenterTaskModal';
+import { MaestroProcessModal } from './MaestroProcessModal';
 import { StartInvestigationModal } from './modals/StartInvestigationModal';
 import { SettingsPage } from './SettingsPage';
 import { generateMockInvestigations, calculateKPIs } from '../services/mockInvestigations';
@@ -16,6 +17,7 @@ import { mapEntitiesToInvestigations } from '../utils/investigationMapper';
 import type { ActionCenterTaskInfo, Investigation, InvestigationFilters, TargetInvestigationEntity, AgentOutput } from '../types/investigation';
 import type { ProcessStartRequest, UiPath } from '@uipath/uipath-typescript';
 import { getMissingJobStartScopeMessage, logUiPathTokenDiagnostics } from '../utils/uipathTokenDiagnostics';
+import { buildMaestroProcessInstanceUrl } from '../utils/uipathLinks';
 
 interface InvestigationDashboardProps {
   sdk?: UiPath;
@@ -38,6 +40,13 @@ type ActiveActionCenterTask = {
   task: TaskGetResponse;
   completed: boolean;
 };
+
+type ActiveMaestroProcess = {
+  investigation: Investigation;
+  processUrl: string;
+};
+
+const SILENT_REFRESH_INTERVAL_MS = 15000;
 
 const parsePositiveInteger = (value: unknown): number | undefined => {
   const parsed = Number(value);
@@ -232,12 +241,15 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
   const [actionCenterTasks, setActionCenterTasks] = useState<Record<string, ActionCenterTaskState>>({});
   const [taskRefreshCounter, setTaskRefreshCounter] = useState(0);
   const [activeActionTask, setActiveActionTask] = useState<ActiveActionCenterTask | null>(null);
+  const [activeMaestroProcess, setActiveMaestroProcess] = useState<ActiveMaestroProcess | null>(null);
+  const silentRefreshInFlightRef = useRef(false);
 
-  const fetchInvestigations = useCallback(async (isRefresh = false) => {
+  const fetchInvestigations = useCallback(async (isRefresh = false, showRefreshIndicator = true) => {
+    const shouldShowRefreshIndicator = isRefresh && showRefreshIndicator;
     try {
-      if (isRefresh) {
+      if (shouldShowRefreshIndicator) {
         setRefreshing(true);
-      } else {
+      } else if (!isRefresh) {
         setLoading(true);
       }
       setError(null);
@@ -268,9 +280,9 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
       console.error('Error fetching investigations:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch investigations');
     } finally {
-      if (isRefresh) {
+      if (shouldShowRefreshIndicator) {
         setRefreshing(false);
-      } else {
+      } else if (!isRefresh) {
         setLoading(false);
       }
     }
@@ -651,6 +663,28 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
     fetchInvestigations(false);
   }, [fetchInvestigations]);
 
+  useEffect(() => {
+    if (USE_MOCK_DATA) {
+      return;
+    }
+
+    const refreshSilently = async () => {
+      if (document.visibilityState !== 'visible' || silentRefreshInFlightRef.current) {
+        return;
+      }
+
+      silentRefreshInFlightRef.current = true;
+      try {
+        await fetchInvestigations(true, false);
+      } finally {
+        silentRefreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSilently, SILENT_REFRESH_INTERVAL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [fetchInvestigations]);
+
   const filteredInvestigations = useMemo(() => {
     console.log('Filtering with:', {
       searchQuery,
@@ -856,6 +890,35 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
     });
   };
 
+  const getMaestroProcessUrl = (investigation: Investigation) => {
+    if (!investigation.maestroProcessInstanceKey || !investigation.folderId) {
+      return null;
+    }
+
+    const processKey = investigation.maestroProcessTypeKey || import.meta.env.VITE_MAESTRO_PROCESS_KEY;
+    if (!processKey) {
+      return null;
+    }
+
+    return buildMaestroProcessInstanceUrl({
+      processKey,
+      processInstanceKey: investigation.maestroProcessInstanceKey,
+      folderKey: investigation.folderId,
+    });
+  };
+
+  const handleMaestroProcessClick = (investigation: Investigation) => {
+    const processUrl = getMaestroProcessUrl(investigation);
+    if (!processUrl) {
+      return;
+    }
+
+    setActiveMaestroProcess({
+      investigation,
+      processUrl,
+    });
+  };
+
   useEffect(() => {
     if (!activeActionTask || activeActionTask.completed || !taskService) return;
 
@@ -1005,8 +1068,8 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
         onFilterClick={handleKPIFilterClick}
       />
 
-      <div className="flex-1 ml-[200px]">
-        <div className="p-6">
+      <div className="ml-[176px] min-w-0 flex-1 xl:ml-[200px]">
+        <div className="p-3 lg:p-5 xl:p-6">
           {activeView === 'settings' ? (
             <SettingsPage
               demoResetTime={demoResetTime}
@@ -1018,10 +1081,10 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
           ) : (
             <>
               {/* Header */}
-              <div className="flex items-center justify-between mb-6">
-                <div>
+              <div className="mb-5 flex flex-col gap-4 lg:mb-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="min-w-0">
                   <div className="flex items-center gap-3">
-                    <h1 className="text-2xl font-bold text-white mb-1">Investigation Queue</h1>
+                    <h1 className="mb-1 text-xl font-bold text-white sm:text-2xl">Investigation Queue</h1>
                     {!USE_MOCK_DATA && (
                       <span className="px-2 py-1 bg-blue-500/20 border border-blue-500/50 rounded text-xs font-medium text-blue-400">
                         Live Data
@@ -1037,7 +1100,7 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
                     {allInvestigations.length} investigations loaded
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex shrink-0 items-center gap-2 sm:gap-3">
                   <button
                     onClick={handleRefresh}
                     disabled={refreshing}
@@ -1055,7 +1118,7 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
                   </button>
                   <button
                     onClick={() => setIsStartInvestigationModalOpen(true)}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 font-medium transition-colors shadow-sm flex items-center gap-2"
+                    className="flex items-center gap-2 rounded-lg bg-red-500 px-3 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-red-600 sm:px-4"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -1087,6 +1150,7 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
                 onInvestigationClick={handleInvestigationClick}
                 actionCenterTasks={actionCenterTasks}
                 onActionCenterTaskClick={handleActionCenterTaskClick}
+                onMaestroProcessClick={handleMaestroProcessClick}
                 sortField={sortField}
                 sortDirection={sortDirection}
                 onSortChange={handleSortChange}
@@ -1119,6 +1183,9 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
           processDetails={processDetails}
           sdk={sdk}
           onClose={handleCloseDetails}
+          actionCenterTask={actionCenterTasks[selectedInvestigation.id]}
+          onActionCenterTaskClick={handleActionCenterTaskClick}
+          onMaestroProcessClick={handleMaestroProcessClick}
         />
       )}
 
@@ -1132,6 +1199,14 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
             setTaskRefreshCounter((value) => value + 1);
             void fetchInvestigations(true);
           }}
+        />
+      )}
+
+      {activeMaestroProcess && (
+        <MaestroProcessModal
+          investigation={activeMaestroProcess.investigation}
+          processUrl={activeMaestroProcess.processUrl}
+          onClose={() => setActiveMaestroProcess(null)}
         />
       )}
     </div>

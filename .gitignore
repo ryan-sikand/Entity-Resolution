@@ -11,3 +11,6 @@ app/.claude/
 *.tgz
 *.log
 /package-lock.json
+
+# Local UiPath CLI skills checkout; maintained as its own repository
+/app/skills/

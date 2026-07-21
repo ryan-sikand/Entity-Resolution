@@ -79,3 +79,17 @@ export const buildActionCenterTaskEmbedUrl = (taskId: number | string) => {
     String(taskId),
   ]);
 };
+
+export const buildActionCenterTaskUrl = (taskId: number | string) => {
+  const orgName = getEnvString(import.meta.env.VITE_UIPATH_ORG_NAME);
+  const tenantName = getEnvString(import.meta.env.VITE_UIPATH_TENANT_NAME);
+
+  return buildPortalUrl([
+    orgName,
+    tenantName,
+    'actions_',
+    'current-task',
+    'tasks',
+    String(taskId),
+  ]);
+};

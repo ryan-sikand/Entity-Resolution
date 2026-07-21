@@ -84,7 +84,7 @@ export const FilterControls = ({ filters, onFiltersChange, onClearFilters }: Fil
   };
 
   return (
-    <div className="flex items-center gap-3 mb-6">
+    <div className="mb-6 flex flex-wrap items-center gap-3">
       {filterOptions.map((filter) => {
         const activeCount = getActiveCount(filter.name);
         const isOpen = openDropdown === filter.name;
@@ -155,13 +155,6 @@ export const FilterControls = ({ filters, onFiltersChange, onClearFilters }: Fil
           </button>
         </>
       )}
-
-      <div className="ml-auto flex items-center gap-2">
-        <label className="flex items-center gap-2 text-sm text-gray-400">
-          <input type="checkbox" className="rounded border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 bg-gray-700" />
-          <span>Needs Attention</span>
-        </label>
-      </div>
     </div>
   );
 };

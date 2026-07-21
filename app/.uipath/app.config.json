@@ -1,8 +1,9 @@
 {
   "appName": "entityresolution",
-  "appVersion": "2.0.21",
+  "displayName": "entityresolution",
+  "appVersion": "2.0.22",
   "systemName": "IDff21af604c3e46a1a54d94c412b38093",
   "appUrl": null,
-  "registeredAt": "2026-06-09T01:20:49.688Z",
+  "registeredAt": "2026-07-17T16:25:53.967Z",
   "appType": "Web"
 }

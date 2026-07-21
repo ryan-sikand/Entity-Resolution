@@ -1,12 +1,12 @@
 ﻿import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import type { Investigation, AgentOutput, CheckOutcome } from '../types/investigation';
+import type { ActionCenterTaskInfo, Investigation, AgentOutput, CheckOutcome } from '../types/investigation';
 import type { UiPath } from '@uipath/uipath-typescript';
 import { getStatusBadgeConfig } from '../utils/caseStatus';
 import { getRiskContent } from '../utils/riskContent';
 import { ImageModal } from './ui/ImageModal';
 import { Timeline } from './ui/Timeline';
-import { buildMaestroProcessInstanceUrl } from '../utils/uipathLinks';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import minaHeadshotUrl from '../assets/demo-images/Mina Park Headshot.png?inline';
 import sergeiHeadshotUrl from '../assets/demo-images/Sergei Volkov Headshot.png?inline';
 import sergeiFinancialUrl from '../assets/demo-images/SergeiVolkov_Quarterly financial report overview.jpg?inline';
@@ -23,13 +23,20 @@ interface InvestigationDetailsProps {
   };
   sdk?: UiPath;
   onClose: () => void;
+  actionCenterTask?: ActionCenterTaskInfo;
+  onActionCenterTaskClick?: (investigation: Investigation) => void;
+  onMaestroProcessClick?: (investigation: Investigation) => void;
 }
 
 export const InvestigationDetails = ({
   investigation,
   processDetails,
   onClose,
+  actionCenterTask,
+  onActionCenterTaskClick,
+  onMaestroProcessClick,
 }: InvestigationDetailsProps) => {
+  useBodyScrollLock();
 
 
   // Document fetching state
@@ -46,8 +53,6 @@ export const InvestigationDetails = ({
   // Tab navigation state
   const [activeDetailTab, setActiveDetailTab] = useState<'summary' | 'checks'>('summary');
 
-  // Get environment variables
-  const PROCESS_DEFINITION_KEY = import.meta.env.VITE_MAESTRO_PROCESS_KEY;
   const showDebugBox = import.meta.env.VITE_SHOW_DEBUG_BOX === 'true';
   const normalizedSubjectName = investigation?.subjectName?.trim().toLowerCase() || '';
   const subjectAssetConfig =
@@ -63,21 +68,6 @@ export const InvestigationDetails = ({
             subjectPhoto: minaHeadshotUrl,
           }
         : null;
-
-  const openMaestroProcess = () => {
-    if (!investigation?.maestroProcessInstanceKey || !investigation?.folderId) {
-      console.error('Missing maestroProcessInstanceKey or folderId');
-      return;
-    }
-
-    const processKey = investigation.maestroProcessTypeKey || PROCESS_DEFINITION_KEY;
-    const url = buildMaestroProcessInstanceUrl({
-      processKey,
-      processInstanceKey: investigation.maestroProcessInstanceKey,
-      folderKey: investigation.folderId,
-    });
-    window.open(url, '_blank');
-  };
 
   // Load bundled demo documents.
   const fetchDocumentUrls = async () => {
@@ -162,36 +152,63 @@ export const InvestigationDetails = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-hidden bg-black/50 p-2 backdrop-blur-sm animate-in fade-in duration-200 sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-[#1a1d29] rounded-lg shadow-2xl w-[95vw] h-[95vh] flex flex-col border border-gray-800 animate-in zoom-in-95 duration-200"
+        className="flex h-[min(95vh,1040px)] w-[min(96vw,1600px)] flex-col overflow-hidden rounded-lg border border-gray-800 bg-[#1a1d29] shadow-2xl animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex justify-between items-center p-6 border-b border-gray-800 bg-[#252836] rounded-t-lg">
-          <div className="flex items-center gap-4">
-            <h2 className="text-2xl font-bold text-white">Investigation Details</h2>
+        <div className="flex flex-col gap-3 border-b border-gray-800 bg-[#252836] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5 lg:p-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-3 sm:gap-4">
+            <h2 className="truncate text-xl font-bold text-white sm:text-2xl">Investigation Details</h2>
             <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border ${getStatusBadgeConfig(investigation.caseStatus).styles}`}>
               {getStatusBadgeConfig(investigation.caseStatus).icon}
               {getStatusBadgeConfig(investigation.caseStatus).label}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {investigation.maestroProcessInstanceKey && investigation.folderId && (
               <button
-                onClick={openMaestroProcess}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
-                title="Open in Maestro"
+                onClick={() => onMaestroProcessClick?.(investigation)}
+                className="flex items-center gap-2 rounded-lg bg-gray-700 px-3 py-2 text-sm text-white transition-colors hover:bg-gray-600 sm:px-4"
+                title="Open Maestro in app"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 13a5 5 0 007.42.8l.13-.13a5 5 0 000-7.08 5.01 5.01 0 00-7.07-.01l-3 3" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 11a5 5 0 00-7.42-.8l-.13.13a5 5 0 000 7.08 5.01 5.01 0 007.07.01l3-3" />
                 </svg>
-                Open in Maestro
+                <span className="hidden sm:inline">Open Maestro</span>
               </button>
             )}
+            <button
+              onClick={() => onActionCenterTaskClick?.(investigation)}
+              disabled={actionCenterTask?.status !== 'available'}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors sm:px-4 ${
+                actionCenterTask?.status === 'available'
+                  ? 'bg-red-500 text-white hover:bg-red-600'
+                  : 'cursor-not-allowed bg-gray-700/50 text-gray-500'
+              }`}
+              title={
+                actionCenterTask?.status === 'available'
+                  ? actionCenterTask.taskTitle
+                    ? `Open Action Center task: ${actionCenterTask.taskTitle}`
+                    : 'Open Action Center task'
+                  : actionCenterTask?.status === 'loading'
+                    ? 'Checking for an Action Center task'
+                    : 'No pending Action Center task exists for this investigation'
+              }
+            >
+              {actionCenterTask?.status === 'loading' ? (
+                <span className="h-4 w-4 rounded-full border-2 border-gray-500 border-t-gray-300 animate-spin" />
+              ) : (
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5h6m-6 4h6m-6 4h3m-6 7h12a2 2 0 002-2V6.5L15.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2z" />
+                </svg>
+              )}
+              <span className="hidden sm:inline">Open Task</span>
+            </button>
             <button
               onClick={onClose}
               className="text-gray-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-gray-700"
@@ -205,9 +222,9 @@ export const InvestigationDetails = ({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4 sm:p-5 lg:space-y-6 lg:p-6">
           {/* Tab Navigation */}
-          <div className="flex gap-2 border-b border-gray-800 pb-4">
+          <div className="flex gap-2 overflow-x-auto border-b border-gray-800 pb-4">
             <button
               onClick={() => setActiveDetailTab('summary')}
               className={`px-4 py-2 rounded-t-lg font-medium transition-colors ${activeDetailTab === 'summary'
@@ -229,18 +246,18 @@ export const InvestigationDetails = ({
           </div>
 
           {/* Two Column Layout */}
-          <div className="grid grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:gap-6">
             {/* Left Column */}
-            <div className="space-y-6">
+            <div className="space-y-5 lg:space-y-6">
               {/* Subject Profile */}
-              <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+              <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
                   Subject Profile
                 </h3>
-                <div className="flex gap-6 items-center">
+                <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
                   <div className="flex-1 grid grid-cols-1 gap-4">
                     <div>
                       <label className="text-xs text-gray-400 uppercase tracking-wide">Full Name</label>
@@ -284,7 +301,7 @@ export const InvestigationDetails = ({
 
               {/* Document Section - Passport */}
               {documentUrls.passport && (
-                <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+                <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -310,7 +327,7 @@ export const InvestigationDetails = ({
               )}
 
               {/* Agent Risk Assessment */}
-              <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+              <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                 <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                   <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -344,7 +361,7 @@ export const InvestigationDetails = ({
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 uppercase tracking-wide mb-2 block">Check Outcome Roll-Up</label>
-                      <div className="flex items-center gap-4">
+                      <div className="flex flex-wrap items-center gap-4">
                         <div className="flex items-center gap-2">
                           {getOutcomeBadge('Flagged')}
                           <span className="text-white font-semibold">{outcomeCounts.flagged}</span>
@@ -367,7 +384,7 @@ export const InvestigationDetails = ({
 
               {/* Financial Summary Card */}
               {documentUrls.financial && (
-                <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+                <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -394,10 +411,10 @@ export const InvestigationDetails = ({
             </div>
 
             {/* Right Column */}
-            <div className="space-y-6">{activeDetailTab === 'summary' ? (
+            <div className="space-y-5 lg:space-y-6">{activeDetailTab === 'summary' ? (
               <>
                 {/* Risk Summary Card */}
-                <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+                <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-1.964-1.333-2.732 0L3.732 16c-.77 1.333.192 3 1.732 3z" />
@@ -405,7 +422,7 @@ export const InvestigationDetails = ({
                     Risk Summary
                   </h3>
                   <div className="space-y-4">
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
                       <div>
                         <label className="text-xs text-gray-400 uppercase tracking-wide block mb-1">Overall Risk</label>
                         <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${investigation.overallRisk === 'High' ? 'bg-red-500/20 text-red-400 border-red-500/30' :
@@ -434,7 +451,7 @@ export const InvestigationDetails = ({
                 </div>
 
                 {/* Key Risk Drivers */}
-                <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+                <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -452,7 +469,7 @@ export const InvestigationDetails = ({
                 </div>
 
                 {/* Timeline of Significant Events */}
-                <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+                <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -463,14 +480,14 @@ export const InvestigationDetails = ({
                 </div>
 
                 {/* Associations / Network Context */}
-                <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+                <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                     Associations / Network Context
                   </h3>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <label className="text-xs text-gray-400 uppercase tracking-wide">Vessels Linked</label>
                       <p className="text-white font-medium mt-1">
@@ -495,7 +512,7 @@ export const InvestigationDetails = ({
             ) : (
               <>
                 {/* Source Checks */}
-                <div className="bg-[#252836] rounded-lg border border-gray-700 p-6">
+                <div className="rounded-lg border border-gray-700 bg-[#252836] p-4 sm:p-5 lg:p-6">
                   <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
                     <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
@@ -536,7 +553,7 @@ export const InvestigationDetails = ({
 
           {/* Debug Box - Only shown when VITE_SHOW_DEBUG_BOX=true */}
           {showDebugBox && processDetails.rawVariables && (
-            <div className="bg-[#252836] rounded-lg border border-yellow-500/50 p-6">
+            <div className="rounded-lg border border-yellow-500/50 bg-[#252836] p-4 sm:p-5 lg:p-6">
               <h3 className="text-lg font-semibold text-yellow-400 mb-4 flex items-center gap-2">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />

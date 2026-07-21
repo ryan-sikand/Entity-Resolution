@@ -1,7 +1,6 @@
 import { formatTimeAgo } from '../services/mockInvestigations';
 import type { ActionCenterTaskInfo, Investigation, RiskLevel, CaseStatus } from '../types/investigation';
 import { getStatusBadgeConfig } from '../utils/caseStatus';
-import { buildMaestroProcessInstanceUrl } from '../utils/uipathLinks';
 
 type SortField = 'subjectName' | 'subjectId' | 'overallRisk' | 'caseStatus' | 'flaggedChecks' | 'lastActivity';
 type SortDirection = 'asc' | 'desc';
@@ -15,6 +14,7 @@ interface InvestigationTableProps {
   onInvestigationClick?: (investigation: Investigation) => void;
   actionCenterTasks?: Record<string, ActionCenterTaskInfo>;
   onActionCenterTaskClick?: (investigation: Investigation) => void;
+  onMaestroProcessClick?: (investigation: Investigation) => void;
   sortField: SortField;
   sortDirection: SortDirection;
   onSortChange: (field: SortField, direction: SortDirection) => void;
@@ -29,13 +29,11 @@ export const InvestigationTable = ({
   onInvestigationClick,
   actionCenterTasks = {},
   onActionCenterTaskClick,
+  onMaestroProcessClick,
   sortField,
   sortDirection,
   onSortChange,
 }: InvestigationTableProps) => {
-  // Get process definition key from environment
-  const PROCESS_DEFINITION_KEY = import.meta.env.VITE_MAESTRO_PROCESS_KEY;
-
   // Handle sorting
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -45,22 +43,6 @@ export const InvestigationTable = ({
       // Set new field with descending as default
       onSortChange(field, 'desc');
     }
-  };
-
-  const openMaestroProcess = (investigation: Investigation, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row selection when clicking the button
-    if (!investigation.maestroProcessInstanceKey || !investigation.folderId) {
-      console.error('Missing maestroProcessInstanceKey or folderId');
-      return;
-    }
-
-    const processKey = investigation.maestroProcessTypeKey || PROCESS_DEFINITION_KEY;
-    const url = buildMaestroProcessInstanceUrl({
-      processKey,
-      processInstanceKey: investigation.maestroProcessInstanceKey,
-      folderKey: investigation.folderId,
-    });
-    window.open(url, '_blank');
   };
 
   const getInitials = (name: string): string => {
@@ -222,11 +204,11 @@ export const InvestigationTable = ({
     }
 
     return (
-      <div className="flex items-center justify-between px-6 py-4 border-t border-gray-800">
+      <div className="flex flex-col gap-3 border-t border-gray-800 px-3 py-3 sm:flex-row sm:items-center sm:justify-between lg:px-4">
         <p className="text-sm text-gray-400">
           Showing {(currentPage - 1) * 10 + 1} to {Math.min(currentPage * 10, totalInvestigations)} of {totalInvestigations} investigations
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
@@ -240,7 +222,7 @@ export const InvestigationTable = ({
             <button
               key={page}
               onClick={() => onPageChange(page)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${currentPage === page
+              className={`rounded-md px-3 py-2 text-sm font-medium transition-colors sm:px-4 ${currentPage === page
                   ? 'bg-red-500 text-white'
                   : 'bg-[#252836] border border-gray-700 text-gray-400 hover:bg-gray-800'
                 }`}
@@ -263,13 +245,13 @@ export const InvestigationTable = ({
   };
 
   return (
-    <div className="bg-[#1a1d29] rounded-lg border border-gray-800 overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full">
+    <div className="overflow-hidden rounded-lg border border-gray-800 bg-[#1a1d29]">
+      <div className="overflow-hidden">
+        <table className="w-full table-fixed">
           <thead className="bg-[#252836] border-b border-gray-800">
             <tr>
               <th
-                className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-700/50 transition-colors"
+                className="w-[18%] cursor-pointer px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:bg-gray-700/50 lg:px-4"
                 onClick={() => handleSort('subjectName')}
               >
                 <div className="flex items-center gap-2">
@@ -278,7 +260,7 @@ export const InvestigationTable = ({
                 </div>
               </th>
               <th
-                className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-700/50 transition-colors"
+                className="w-[10%] cursor-pointer px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:bg-gray-700/50 xl:px-3"
                 onClick={() => handleSort('subjectId')}
               >
                 <div className="flex items-center gap-2">
@@ -287,7 +269,7 @@ export const InvestigationTable = ({
                 </div>
               </th>
               <th
-                className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-700/50 transition-colors"
+                className="w-[8%] cursor-pointer px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:bg-gray-700/50 xl:px-3"
                 onClick={() => handleSort('overallRisk')}
               >
                 <div className="flex items-center gap-2">
@@ -296,7 +278,7 @@ export const InvestigationTable = ({
                 </div>
               </th>
               <th
-                className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-700/50 transition-colors"
+                className="w-[11%] cursor-pointer px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:bg-gray-700/50 xl:px-3"
                 onClick={() => handleSort('caseStatus')}
               >
                 <div className="flex items-center gap-2">
@@ -305,7 +287,7 @@ export const InvestigationTable = ({
                 </div>
               </th>
               <th
-                className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-700/50 transition-colors"
+                className="w-[8%] cursor-pointer px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:bg-gray-700/50 xl:px-3"
                 onClick={() => handleSort('flaggedChecks')}
               >
                 <div className="flex items-center gap-2">
@@ -313,11 +295,11 @@ export const InvestigationTable = ({
                   {renderSortIcon('flaggedChecks')}
                 </div>
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="w-[25%] px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 xl:px-3">
                 Intel Summary
               </th>
               <th
-                className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider cursor-pointer hover:bg-gray-700/50 transition-colors"
+                className="w-[9%] cursor-pointer px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:bg-gray-700/50 xl:px-3"
                 onClick={() => handleSort('lastActivity')}
               >
                 <div className="flex items-center gap-2">
@@ -325,11 +307,11 @@ export const InvestigationTable = ({
                   {renderSortIcon('lastActivity')}
                 </div>
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="w-[5%] px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 xl:px-3">
                 Maestro
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                Actions
+              <th className="w-[6%] px-2 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-400 xl:px-3">
+                Task
               </th>
             </tr>
           </thead>
@@ -343,35 +325,35 @@ export const InvestigationTable = ({
                 className={`transition-colors ${hasRisk ? 'hover:bg-gray-800/50 cursor-pointer' : 'opacity-60 cursor-not-allowed'}`}
                 onClick={() => hasRisk && onInvestigationClick?.(investigation)}
               >
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3">
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-full ${getAvatarColor(investigation.subjectName)} flex items-center justify-center`}>
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${getAvatarColor(investigation.subjectName)} lg:h-10 lg:w-10`}>
                       <span className="text-white text-sm font-semibold">
                         {getInitials(investigation.subjectName)}
                       </span>
                     </div>
-                    <div>
-                      <div className="text-sm font-medium text-white">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-white" title={investigation.subjectName}>
                         {investigation.subjectName}
                       </div>
-                      <div className="text-xs text-gray-400">
+                      <div className="truncate text-xs text-gray-400" title={`${investigation.subjectNationality} | DOB: ${investigation.subjectDob}`}>
                         {investigation.subjectNationality} | DOB: {investigation.subjectDob}
                       </div>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-300 font-mono">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3">
+                  <div className="truncate font-mono text-sm text-gray-300" title={investigation.subjectId}>
                     {investigation.subjectId}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3">
                   {getRiskBadge(investigation.overallRisk)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3">
                   {getStatusBadge(investigation.caseStatus)}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3">
                   <div className="flex items-center gap-2">
                     <span className={`text-lg font-bold ${investigation.flaggedChecks > 5 ? 'text-red-400' :
                         investigation.flaggedChecks > 2 ? 'text-orange-400' :
@@ -383,22 +365,22 @@ export const InvestigationTable = ({
                     <span className="text-sm text-gray-400">{investigation.totalChecks}</span>
                   </div>
                 </td>
-                <td className="px-6 py-4">
-                  <div className="text-sm text-gray-300 max-w-md truncate">
+                <td className="px-2 py-3 xl:px-3">
+                  <div className="truncate text-sm text-gray-300" title={investigation.intelSummary}>
                     {investigation.intelSummary}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3">
                   <div className="text-sm text-gray-400">
                     {formatTimeAgo(investigation.lastActivity)}
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3" onClick={(e) => e.stopPropagation()}>
                   {investigation.maestroProcessInstanceKey && investigation.folderId ? (
                     <button
-                      onClick={(e) => openMaestroProcess(investigation, e)}
-                      className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white transition-all duration-200 hover:shadow-md border border-gray-700"
-                      title="Open in Maestro"
+                      onClick={() => onMaestroProcessClick?.(investigation)}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-gray-700 bg-gray-800 text-gray-300 transition-all duration-200 hover:bg-gray-700 hover:text-white hover:shadow-md"
+                      title="Open Maestro in app"
                     >
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 13a5 5 0 007.42.8l.13-.13a5 5 0 000-7.08 5.01 5.01 0 00-7.07-.01l-3 3" />
@@ -409,12 +391,13 @@ export const InvestigationTable = ({
                     <span className="text-gray-500 text-xs">-</span>
                   )}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                <td className="whitespace-nowrap px-2 py-3 xl:px-3" onClick={(e) => e.stopPropagation()}>
                   <button
                     onClick={() => onActionCenterTaskClick?.(investigation)}
                     disabled={actionCenterButton.disabled}
-                    className={`inline-flex items-center justify-center gap-1.5 min-w-[76px] px-3 py-2 rounded-md text-sm font-medium transition-colors ${actionCenterButton.className}`}
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-md text-sm font-medium transition-colors ${actionCenterButton.className}`}
                     title={actionCenterButton.title}
+                    aria-label={actionCenterButton.title}
                   >
                     {actionCenterButton.label === 'Loading' ? (
                       <span className="w-3.5 h-3.5 rounded-full border-2 border-gray-500 border-t-gray-300 animate-spin" />
@@ -423,7 +406,7 @@ export const InvestigationTable = ({
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5h6m-6 4h6m-6 4h3m-6 7h12a2 2 0 002-2V6.5L15.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2z" />
                       </svg>
                     )}
-                    <span>{actionCenterButton.label}</span>
+                    <span className="sr-only">{actionCenterButton.label}</span>
                   </button>
                 </td>
               </tr>
