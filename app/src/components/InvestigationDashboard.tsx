@@ -63,13 +63,15 @@ const getConfiguredRuntimeType = (): RuntimeType => {
 };
 
 const buildStartInputArguments = (
-  subjectName: string
+  subjectName: string,
+  analystEmail: string
 ) => {
   const trimmedSubjectName = subjectName.trim();
 
   return {
     subjectName: trimmedSubjectName,
     Target_Name: trimmedSubjectName,
+    intelAnalystEmail: analystEmail.trim(),
   };
 };
 
@@ -577,7 +579,7 @@ export const InvestigationDashboard = ({ sdk }: InvestigationDashboardProps) => 
 
       const processKey = (import.meta.env.VITE_MAESTRO_PROCESS_KEY || '3F9A25ED-FF9C-4F77-B326-8ADEFCBFB7BF').trim();
       const startTarget = resolveProcessStartTarget(processKey);
-      const inputArguments = buildStartInputArguments(subjectName);
+      const inputArguments = buildStartInputArguments(subjectName, analystEmail);
       const runAsMe = getConfiguredRunAsMe();
       const runtimeType = getConfiguredRuntimeType();
       const jobsCount = parsePositiveInteger(import.meta.env.VITE_MAESTRO_JOBS_COUNT) ?? 1;
